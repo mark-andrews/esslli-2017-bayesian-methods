@@ -1,0 +1,865 @@
+---
+title: "Introducing Bayesian Language models"
+subtitle: 'Unigram, Bigram, Hidden Markov, & Topic models'
+author: |
+  | Mark Andrews
+  | Psychology Department, Nottingham Trent University
+  | 
+  | \faEnvelopeO\  ```mark.andrews@ntu.ac.uk```
+  | \faTwitter\ ```@xmjandrews```
+date: "July 16, 2017"
+fontsize: 10pt
+output:
+ beamer_presentation:
+#  keep_tex: true
+  fonttheme: "serif"
+  includes:
+   in_header: slides_preamble.tex
+
+---
+
+```{r setup, include=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(tidytext)
+library(gutenbergr)
+library(latex2exp)
+library(wordcloud)
+library(topicmodels)
+library(pander)
+library(stringr)
+
+sample.dirichlet <- function(alpha) as.vector(MCMCpack::rdirichlet(1, alpha))
+```
+
+## Language data
+
+- A *minimal* description of observed language data is as follows: $$
+  \mathcal{D} = w_1, w_2 \ldots w_j \ldots w_J,
+$$
+with 
+$$
+w_j = w_{ji}, w_{j2} \ldots w_{jn_j},
+$$
+and
+$$
+w_{ji} \in \mathcal{V},
+$$
+where $\mathcal{V}$ is a finite vocabulary, which can be represented for simplicity by integers
+$$
+\mathcal{V} = \{1, 2 \ldots V\}.
+$$
+- In other words, we can describe language data as a set of sequences of symbols. 
+- Each $w_{ji}$ usually represents a word (but could represent e.g. phonemes, instead) and each $w_j$ represents a text or sentence. 
+
+## Unigram probabilistic language model
+
+- A *probailistic language model* is any probailistic generative model of the language data $\mathcal{D}$.
+- One of the simplest possible probabilistic language models is
+$$
+w_{ji} \sim \mathrm{dcat}(\pi),\quad \text{for $i \in 1,2\ldots n_j$, $j \in 1,2\ldots J$}
+$$
+where $\dcat$ represents a categorical distribution (probability mass function) over $1\ldots V$ with 
+$$\mathrm{Pr(w_{ji} = k)} = \pi_k.$$
+- In other words, we model each word $w_{ji}$ as drawn independently from a single categorical distribution with parameters $\pi$.
+
+
+## Bayesian unigram models
+
+- In any Bayesian model, we provide a full probabilistic account of all variables, including observed variables, parameters, etc.
+- For the case of a probabilistic unigram model, a common Bayesian unigram model would be
+$$
+\begin{aligned}
+\pi &\sim \ddirichlet{\alpha},\\
+w_{ji} &\sim \dcat{\pi},\quad \text{for $i \in 1,2\ldots n_j$, $j \in 1,2\ldots J$}.
+\end{aligned}
+$$
+- Here, $\ddirichlet$ denotes a $V$-dimensional Dirichlet distribution, which is a probability distribution over $V$-dimensional probability mass functions. It has hyperparameters $\alpha = \alpha_1, \alpha_2 \ldots \alpha_v \ldots \alpha_V$, where each $\alpha_v > 0.0$.
+- The Dirichlet distribution is commonly chosen in this context because it is a conjugate prior of the categorical distribution.
+
+## Dirichlet Distribution
+
+- The Dirichlet distribution is 
+$$
+\ddirichlet{\alpha} = \frac{\Gamma(\sum_v \alpha_v)}{\prod_v\Gamma(\alpha_v)} \prod_{v=1}^V \pi_v^{\alpha_v - 1}
+$$
+where $$
+\frac{\Gamma(\sum_v \alpha_v)}{\prod_v\Gamma(\alpha_v)}
+$$ 
+is the normalizing constant, i.e., 
+$$
+\frac{\prod_v\Gamma(\alpha_v)}{\Gamma(\sum_v \alpha_v)} = \int \prod_{v=1}^V \pi_{v}^{\alpha_v - 1} d\pi
+$$
+
+
+## Dirichlet distribution hyperparameters
+
+- As mentioned, the hyperparameters of a $V$-dimensional Dirichlet distribution is a $V$-dimensional vector $\alpha$ of positive values.
+- It is convenient to sometimes represent $\alpha$ as follows:
+$$
+\alpha = a \cdot m
+$$
+where $a>0$ is a scalar and $m$ is $V$-dimensional probability mass function, i.e $0 \leq m_v \leq 1$ and $\sum_v m_v =1$.
+- In this reparameterization, $m$ is a *location* vector and $a$ is a *scale* vector. In other words, $m$ is the centre of the distribution, and $a$ indicates how spread out around the centre the distribution is. Also, $m$ is exactly the average, or expected value of the distribution.
+- Note $a = \sum_v \alpha_v$, $m = \alpha/a$.
+
+## 3d Dirichlet distribution: Example 1
+
+```{r howdowenamethings}
+plot.dirichlet <- function(alpha=c(1.1,1.1,1.1)){
+  f <- function(v) dirichlet::ddirichlet(v, alpha)
+  
+  mesh <- dirichlet::simplex_mesh(.0025) %>% 
+    as.data.frame %>% 
+    tbl_df
+  
+  mesh$f <- mesh %>% 
+    apply(1, function(v) f(dirichlet::bary2simp(v)))
+  
+  .title <- sprintf(' = %2.1f, %2.1f, %2.1f', 
+                    alpha[1],
+                    alpha[2],
+                    alpha[3])
+  .title <- paste(TeX('$\\alpha'), .title, '$')
+  
+  ggplot(mesh, aes(x, y, z=f)) + 
+    geom_contour() +
+    theme_classic() +
+    geom_raster(aes(fill = f)) +
+    coord_equal(xlim = c(0,1), ylim = c(0, .85)) +
+    theme(axis.title=element_blank(),
+          axis.text=element_blank(),
+          axis.ticks=element_blank()) + 
+    geom_contour(colour='yellow') +
+    scale_fill_continuous(name="Probability\ndensity")
+  
+}
+plot.dirichlet()
+```
+
+Here, $\alpha = 1.1, 1.1, 1.1$, or $a=3.3$, $m=[\tfrac{1}{3}, \tfrac{1}{3}, \tfrac{1}{3}]$
+
+## 3d Dirichlet distribution: Example 2
+
+```{r}
+plot.dirichlet(c(5,5,5))
+```
+
+Here, $\alpha = 5,5,5$, or $a=15$, $m=[\tfrac{1}{3}, \tfrac{1}{3}, \tfrac{1}{3}]$
+
+
+## 3d Dirichlet distribution: Example 3
+
+```{r}
+plot.dirichlet(c(5,10,15))
+```
+
+Here, $\alpha = 5,10,15$, or $a=30$, $m=[\tfrac{1}{6}, \tfrac{1}{3}, \tfrac{1}{2}]$
+
+
+## Unigram model: Bayesian network {.fragile}
+
+\begin{tikzpicture}[>=latex]
+\matrix[row sep=0.8cm,column sep=0.5cm] {
+	&&&& \node (wji) [observation]{$w_{j\!i}$};&\node (xlim) [limit]{$i\!\in\!\{1...n_j\}$};\\
+	&&&& &\node (jlim) [limit]{$j\!\in\!\{1...J\}$};\\ 
+	&&&& \node (pi) [parameter]{$\pi$};&\\
+	&&&& \node (alpha) [parameter]{$\alpha$};&\\
+    };
+
+\path (pi) edge[->] (wji) ;
+\path (alpha) edge[->] (pi) ;
+
+\begin{pgfonlayer}{background}
+\node [background,yshift=1mm,inner sep=3mm,fit=(wji) (xlim) ] {};
+\node [background,yshift=0mm,inner sep=5mm,fit=(wji) (xlim) (jlim)] {};
+\end{pgfonlayer}
+
+\end{tikzpicture}
+
+This is a *graphical model* or *Bayesian network*. It shows the conditional independence structure of the variables in the probabilistic model. 
+
+## Posterior inference
+
+- Because the Dirichlet distribution is a conjugate prior to the categorical distribution, calculating the posterior distribution over $\pi$ is possible algebraically:
+$$
+\begin{aligned}
+\Prob{\pi \given \mathcal{D}, \alpha} = \frac{\Prob{D\given \pi}\Prob{\pi \given \alpha}}{\int \Prob{D\given \pi}\Prob{\pi \given \alpha} d\pi}, &\propto \prod_{\{ji\}} \Prob{w_{ji}\given \pi} \Prob{\pi \given \alpha},\\
+&\propto \prod_{v=1}^V \pi_v^{n_v} \prod_{v=1}^V \pi_v^{\alpha_v - 1},\\
+&\propto \prod_{v=1}^V \pi_v^{n_v + \alpha_v - 1},\\
+&\ddirichlet{n + \alpha}.
+\end{aligned}
+$$
+- In other words, given the prior $\ddirichlet{\alpha}$ and observed counts of $n = n_1, n_2 \ldots n_v$ (i.e., $n_v$ is the number of observations of word $v$), the posterior distribution is always $\ddirichlet{n + \alpha}$.
+
+
+## Unigram model of *Moby Dick*
+
+```{r, eval=FALSE, echo=TRUE}
+data("stop_words")
+moby_dick <- gutenberg_download(2701)
+```
+```{r}
+load('data/books.Rda')
+```
+
+```{r message=FALSE, echo=TRUE, results='hide', cache=TRUE}
+word_counts <- moby_dick %>%
+  unnest_tokens(word, text, token = 'words') %>%
+  anti_join(stop_words) %>%
+  count(word, sort=TRUE)
+
+# Make a (named) vector of counts
+counts <- word_counts$n
+words <- word_counts$word
+
+```
+
+## Unigram model of *Moby Dick*
+
+- As a starting point, choose uniform prior
+```{r echo=TRUE}
+alpha <- rep(1, length(counts))
+```
+
+- Draw a sample from posterior distribution $\Prob{\pi \given \mathcal{D}, \alpha}$:
+```{r message=FALSE, echo=TRUE, eval=FALSE}
+vpi <- sample.dirichlet(counts+alpha)
+```
+
+- We can graphically represent this sample as follows
+```{r, eval=FALSE, echo=TRUE}
+wordcloud(words = words, freq = vpi, max.words = 200)
+```
+
+
+## Sample from posterior distribution: Example 1
+
+```{r message=FALSE, echo=FALSE}
+vpi <- sample.dirichlet(counts+alpha)
+wordcloud(words = words, freq = vpi, max.words = 200, rot.per=0.0,fixed.asp = FALSE, random.order = F)
+```
+
+## Sample from posterior distribution: Example 2
+
+```{r message=FALSE}
+vpi <- sample.dirichlet(counts+alpha)
+wordcloud(words = words, freq = vpi, max.words = 200, rot.per=0.0,fixed.asp = FALSE, random.order = F)
+```
+
+## Sample from posterior distribution: Example 3
+
+```{r message=FALSE}
+vpi <- sample.dirichlet(counts+alpha)
+wordcloud(words = words, freq = vpi, max.words = 200, rot.per=0.0, fixed.asp = FALSE, random.order = F)
+```
+
+## Marginal likelihood
+
+- The marginal likelihood is
+$$
+\begin{aligned}
+\Prob{\mathcal{D}\given \alpha} &= \int \Prob{D\given \pi}\Prob{\pi \given \alpha} d\pi,\\
+&= \frac{\Gamma(\sum_v \alpha_v)}{\prod_v\Gamma(\alpha_v)} \int \prod_{v=1}^V \pi_v^{n_k + \alpha_k - 1 d} d\pi,\\
+&= \frac{\Gamma(\sum_v \alpha_v)}{\prod_v\Gamma(\alpha_v)}  \frac{\prod_v\Gamma(n_v + \alpha_v)}{\Gamma(\sum_v (\alpha_v + n_v))}.
+\end{aligned}
+$$
+- It is the likelihood function of $\alpha$, and is marginalized (i.e. integrated) over $\pi$.
+- We can treat this like any other likelihood function.
+
+## Maximum (marginal) likelihood
+
+```{r}
+marginal.likelihood <- function(counts, alpha){
+  a <- sum(alpha)
+  n <- sum(counts)
+  lgamma(a)-sum(lgamma(alpha)) + sum(lgamma(counts + alpha)) - lgamma(a + n)
+}
+
+V <- length(counts)
+m <- rep(1, V)/V
+a <- seq(0.1, 2.0, by=0.01) * V
+loglikelihood.Df <- data.frame(a = a,
+                            ll = sapply(a, function(a) marginal.likelihood(counts, m*a)))
+a.max <- loglikelihood.Df$a[which.max(loglikelihood.Df$ll)]
+ll.max <- max(loglikelihood.Df$ll)
+ggplot(loglikelihood.Df,
+       mapping = aes(x = a, y = ll)) + 
+  geom_line() +
+  theme_classic() +
+  ylab('log marginal likelihood') +
+  xlab('log of Dirichlet concentration parameter (a)') +
+  geom_vline(xintercept = a.max, col='red') + 
+  coord_trans(x = "log")
+
+```
+
+We can set the value of $a$ to the value that maximizes the likelihood function. This is a type of *empirical Bayes* inference.
+
+
+
+
+
+
+## Bigram models
+
+- A bigram probabilistic language model for our observed language data $\mathcal{D}$ is as follows. 
+
+- For $1 \leq j \leq J$,
+$$
+\begin{aligned}
+x_{j1} &\sim \dcat{\pi},\\
+x_{ji} &\sim \dcat{\theta_{x_{ji-1}}},\quad\text{for $2 \leq i \leq n_j$}.
+\end{aligned}
+$$
+- In other words, for each sentence or text, we first sample the initial word for a categorical distribution. For the remaining words, we sample their values from a categorical distribution that is conditioned on the previous word. 
+
+## Bayesian Bigram model
+
+- For a Bayesian version of a bigram model, we provide priors on $\pi$ and $\theta$.
+- Common choices are Dirichlet distributions
+$$
+\begin{aligned}
+\pi &\sim \ddirichlet{\alpha_0},\\
+\theta_v &\sim \ddirichlet{\alpha_v},\quad\text{for $1 \leq v \leq V$},\\
+x_{j1} &\sim \dcat{\pi},\\
+x_{ji} &\sim \dcat{\theta_{x_{ji-1}}},\quad\text{for $2 \leq i \leq n_j$}.
+\end{aligned}
+$$
+- Note that here we have a separate $\alpha_v$ prior for each conditional distribution $\theta_v$. Other options are possible.
+
+## Bigram model Bayesian network {.fragile}
+
+\begin{tikzpicture}[>=latex]
+\matrix[row sep=0.8cm,column sep=0.5cm] {
+&&&&	\node (wj1) [observation]{$w_{j\!1}$};
+    &\node (wj2) [observation]{$w_{j\!2}$};
+    &\node (wj3) [limit]{$\ldots$};
+    &\node (wji) [observation]{$w_{j\!i}$};
+    &\node (wji2) [limit]{$\ldots$};
+    &\node (wjnj) [observation]{$w_{j\!n_j}$};
+\\
+&&&&	&&&&&\node (jlim) [limit]{$j\!\in\!\{1...J\}$};\\ 
+&&&&	 \node (vpi) [parameter]{$\pi$}; &&\node (theta) [parameter]{$\theta_v$};&\node (vlim) [limit,xshift=-5mm,yshift=-2mm]{$v\!\in\!\{1...V\}$}; \\
+&&&& \node (alpha_0) [parameter]{$\alpha_0$};&& \node (alpha_v) [parameter]{$\alpha_v$};\\
+    };
+
+\path (vpi) edge[->] (wj1) ;
+\path (theta) edge[->] (wj2) ;
+\path (theta) edge[->] (wji) ;
+\path (theta) edge[->] (wjnj) ;
+\path (wj1) edge[->] (wj2);
+\path (wj2) edge[->] (wj3);
+\path (wj3) edge[->] (wji);
+\path (wji) edge[->] (wji2);
+\path (wji2) edge[->] (wjnj);
+\path (vpi) edge[->] (wj1) ;
+\path (alpha_0) edge[->] (vpi);
+\path (alpha_v) edge[->] (theta);
+
+\begin{pgfonlayer}{background}
+\node [background,yshift=1mm,inner sep=3mm,fit=(wj1) (wj2) (wj3) (wji) (wji2) (wjnj)] {};
+\node [background,yshift=0mm,inner sep=5mm,fit=(wj1) (wj2) (wj3) (wji) (wji2) (wjnj) (jlim)] {};
+\node [background,yshift=0mm,inner sep=5mm,fit=(theta) (vlim) (alpha_v)] {};
+\end{pgfonlayer}
+
+\end{tikzpicture}
+
+
+## Posterior inference
+
+- The posterior distribution over $\theta_v$ is similar to the case of the posterior inference in Dirichlet distributions in the unigram case, with the difference being that the relevant *counts* are 
+$$
+R_v = R_{v1}, R_{v2} \ldots R_{vu} \ldots R_{vV} 
+$$
+where $R_{vu}$ gives the number of times word $u$ follows word $v$ in the corpus.
+- As such, 
+$$
+\Prob{\theta_v\given \mathcal{D}} = \ddirichlet{R_v + \alpha_v}
+$$
+
+- For the posterior over $\pi$, we can use the marginal count vector $r$, where $r_v$ simply gives the frequency of occurrence of word $v$:
+$$
+\Prob{\pi \given \mathcal{D}} = \ddirichlet{r + \alpha_0}
+$$
+
+## Bigram model of collected works of Charles Dickens
+
+```{r eval=FALSE, echo=TRUE}
+dickens_books_id <- gutenberg_works(
+  author == "Dickens, Charles")$gutenberg_id
+dickens_books <- gutenberg_download(
+  dickens_books_id, meta_fields = "title")
+
+dickens_words <- dickens_books %>%
+  unnest_tokens(word, text, token = 'words') %>% 
+  count(word, sort=TRUE)
+
+dickens_bigrams <- dickens_books %>%
+  unnest_tokens(bigram, text, token = 'ngrams', n=2) %>%
+  count(bigram, sort=TRUE) %>%
+  separate(bigram, c('word1', 'word2'), sep=' ')
+```
+
+```{r, dickens_bigrams, cache=TRUE}
+# I got the Dickens books this way
+# ---------------------------------
+# dickens_books <- gutenberg_download(gutenberg_works(author == "Dickens, Charles")$gutenberg_id, 
+#                                     meta_fields = "title")
+# 
+# I saved them to books.Rda, along with moby_dick
+
+load('data/books.Rda')
+
+dickens_words <- dickens_books %>%
+  unnest_tokens(word, text, token = 'words') %>% 
+  count(word, sort=TRUE)
+
+dickens_bigrams <- dickens_books %>%
+  unnest_tokens(bigram, text, token = 'ngrams', n=2) %>%
+  count(bigram, sort=TRUE) %>%
+  separate(bigram, c('word1', 'word2'), sep=' ')
+  
+
+make.word2int <- function(words){
+  x <- seq(words)
+  names(x) <- words
+  x
+} 
+
+word2int <- make.word2int(dickens_words$word)
+
+V <- length(dickens_words$word)
+
+get.bigram.counts <- function(the.word1){
+  X <- filter(dickens_bigrams, word1 == the.word1) %>% 
+    dplyr::select(word2, n)
+  
+  index <- apply(X, 1, function(row) word2int[row[1]])
+  counts <- rep(0, V)
+  counts[index] <- X$n
+  
+  counts
+}
+
+alpha <- rep(1/V, V)
+
+sample.dirichlet <- function(alpha) as.vector(MCMCpack::rdirichlet(1, alpha))
+
+posterior.cloud <- function(the.word){
+  wordcloud(words = names(word2int), 
+            freq = sample.dirichlet(get.bigram.counts(the.word) + alpha), 
+            max.words = 200, rot.per=0.0,fixed.asp = FALSE, random.order = F)
+}
+
+posterior.sample <- function(the.word){
+  theta <- sample.dirichlet(get.bigram.counts(the.word) + alpha)
+  sample(names(word2int), size=1, replace=T, prob = theta)
+}
+
+get.bigram.simulations <- function(the.word='the', iterations=100){
+  words <- character(iterations)
+  for (iteration in seq(iterations)){
+    the.word <- posterior.sample(the.word)
+    words[iteration] <- the.word
+  }
+  paste(words, collapse=' ')
+}
+
+bigram.simulations <- replicate(10, get.bigram.simulations('the', 50))
+```
+
+
+## Sample from posterior distribution of $\theta_{\text{dear}}$
+
+
+```{r, first_bigram_posterior_cloud, warning=FALSE, message=FALSE}
+posterior.cloud('dear')
+```
+
+
+## Sample from posterior distribution of $\theta_{\text{stand}}$
+```{r, warning=FALSE, message=FALSE}
+posterior.cloud('stand')
+```
+
+
+## Sample from posterior distribution of $\theta_{\text{tall}}$
+```{r, warning=FALSE, message=FALSE}
+posterior.cloud('tall')
+```
+
+
+<!-- ## jkhkjh -->
+<!-- ff -->
+
+## Simulations from a bigram model
+
+- We can generate data from a trained bigram model as follows:
+- First, we sample from the posterior distribution $\Prob{\pi \given \mathcal{D}, \alpha_0}$, and then sample $w_1$ from $\dcat{\pi}$. 
+- We then sample from $\Prob{\theta_{[w_1]}\given \mathcal{D}, \alpha_{[w_1]}}$, and sample $w_2$ from $\dcat{\theta_{[w_1]}}$.
+
+<!-- In the following, I think I always start with w_1 = 'the' and then just show the w_2 ... -->
+## Simulations from a bigram model: Examples 1-3
+
+- `r bigram.simulations[[1]]`
+- `r bigram.simulations[[2]]`
+- `r bigram.simulations[[3]]`
+
+
+## Simulations from a bigram model: Examples 4-6
+
+- `r bigram.simulations[[4]]`
+- `r bigram.simulations[[5]]`
+- `r bigram.simulations[[6]]`
+
+
+## Simulations from a bigram model: Examples 7-9
+
+
+- `r bigram.simulations[[7]]`
+- `r bigram.simulations[[8]]`
+- `r bigram.simulations[[9]]`
+
+## Hidden Markov model
+
+- A Hidden Markov model is a type of latent variable model.
+- It assumes that observed data are generated by sampling from categorical distributions that are indexed by a latent (hidden) first order Markov chain of state variables.
+- The cardinality of the state variable, denoted by $K$ here, is a modelling choice.
+- As a probabilistic language model for our $\mathcal{D}$, a Hidden Markov model is a follows: 
+For $j \in \{1\ldots J\}$, 
+$$
+\begin{aligned}
+x_{j1} &\sim \dcat{\pi},\\
+x_{ji} &\sim \dcat{\theta_{[x_{ji-1}]}}, \quad \text{for $2 \leq i \leq n_{ji}$},\\
+w_{ji} &\sim \dcat{\phi_{[x_{ji}]}}, \text{for $2 \leq i \leq n_{ji}$}
+\end{aligned}
+$$
+- Here, $\theta$ is a $K \times K$ matrix, with $\Prob{x_{ji} = l \given x_{ji-1} = k} = \theta_{kl}$. 
+- The $\phi$ is a $K \times V$ matrix, $\Prob{w_{ji} = v \given x_{ji} = k} = \phi_{kv}$.
+- We put Dirichlet priors on $\pi$, $\theta$, $\phi$.
+
+## Hidden Markov model Bayesian network {.fragile}
+
+\begin{tikzpicture}[>=latex]
+\matrix[row sep=0.5cm,column sep=0.5cm] {
+&&	&&\node (psi) [parameter]{$\psi$};&
+	 \node (phi) [parameter]{$\phi_k$};&\node (klim_phi) [limit,xshift=-5mm,yshift=-2mm]{$k\!\in\!\{1...K\}$};&\\
+\\
+&&	\node (wj1) [observation]{$w_{j\!1}$};
+    &\node (wj2) [observation]{$w_{j\!2}$};
+    &\node (wj3) [limit]{$\ldots$};
+    &\node (wji) [observation]{$w_{j\!i}$};
+    &\node (wji2) [limit]{$\ldots$};
+    &\node (wjnj) [observation]{$w_{j\!n_j}$};
+\\
+&&	\node (xj1) [observation]{$x_{j\!1}$};
+    &\node (xj2) [observation]{$x_{j\!2}$};
+    &\node (xj3) [limit]{$\ldots$};
+    &\node (xji) [observation]{$x_{j\!i}$};
+    &\node (xji2) [limit]{$\ldots$};
+    &\node (xjnj) [observation]{$x_{j\!n_j}$};
+\\
+&&	&&&&&\node (jlim) [limit]{$j\!\in\!\{1...J\}$};\\ 
+&& \node (vpi) [parameter]{$\pi$};&&
+	 \node (theta) [parameter]{$\theta_k$};&\node (klim_theta) [limit,xshift=-5mm,yshift=-2mm]{$k\!\in\!\{1...K\}$};& \\
+&& \node (alpha_0) [parameter]{$\alpha_0$};&& \node (alpha_k) [parameter]{$\alpha_k$};\\
+    };
+\path (phi) edge[->] (wj1) ;
+\path (phi) edge[->] (wj2) ;
+\path (phi) edge[->] (wji) ;
+\path (phi) edge[->] (wjnj) ;
+\path (vpi) edge[->] (xj1) ;
+\path (theta) edge[->] (xj2) ;
+\path (theta) edge[->] (xji) ;
+\path (theta) edge[->] (xjnj) ;
+\path (xj1) edge[->] (wj1);
+\path (xj1) edge[->] (xj2);
+\path (xj2) edge[->] (wj2);
+\path (xj2) edge[->] (xj3);
+\path (xj3) edge[->] (xji);
+\path (xji) edge[->] (xji2);
+\path (xji2) edge[->] (xjnj);
+\path (xji) edge[->] (wji);
+\path (xjnj) edge[->] (wjnj);
+\path (vpi) edge[->] (xj1) ;
+\path (alpha_k) edge[->] (theta);
+\path (alpha_0) edge[->] (vpi);
+\path (psi) edge[->] (phi);
+
+\begin{pgfonlayer}{background}
+\node [background,yshift=1mm,inner sep=3mm,fit=(xj1) (xj2) (xj3) (xji) (xji2) (xjnj) (wj1) (wj2) (wj3) (wji) (wji2) (wjnj)] {};
+\node [background,yshift=0mm,inner sep=5mm,fit=(xj1) (xj2) (xj3) (xji) (xji2) (xjnj) (jlim) (wj1) (wj2) (wj3) (wji) (wji2) (wjnj)  ] {};
+\node [background,yshift=0mm,inner sep=2mm,fit=(klim_theta) (theta)] {};
+\node [background,yshift=0mm,inner sep=3mm,fit=(klim_phi) (phi)] {};
+\end{pgfonlayer}
+
+\end{tikzpicture}
+
+
+
+## Toy example: $\phi$
+
+```{r}
+dcat <- function(vpi, n=1){
+  K <- length(vpi)
+  sample(seq(K), size=n, replace = T, prob=vpi)
+}
+
+Pi <- matrix(c(1/2, 1/2,   0,   0,   0,
+               1/3, 1/3, 1/3,   0,   0,
+               0, 1/3, 1/3, 1/3,   0,
+               0,   0, 1/3, 1/3, 1/3,
+               0,   0,   0, 1/2, 1/2),
+             byrow=TRUE, nrow=5)
+
+K <- nrow(Pi)
+
+phi <- matrix(c(1, 0, 1, 0, 0, 0, 0,
+                0, 1, 0, 1, 0, 0, 0,
+                0, 0, 1, 0, 1, 0, 0,
+                0, 0, 0, 1, 0, 1, 0,
+                0, 0, 0, 0, 1, 0, 1),
+              byrow=TRUE, nrow=5)
+
+phi <- phi/2 + 0.05
+phi <- phi/rowSums(phi)
+
+vpi <- rep(0, K)
+vpi[1] <- 1.0
+
+hmm.simulate <- function(Pi, phi, vpi, n.iterations=10){
+  
+  x <- rep(0, n.iterations+1)
+  w <- rep(0, n.iterations)
+  
+  
+  iteration <- 1
+  x[iteration] <- dcat(vpi)
+  while (iteration <= n.iterations){
+    w[iteration] <- dcat(phi[x[iteration],])
+    x[iteration+1] <- dcat(Pi[x[iteration],])
+    iteration <- iteration + 1
+  }
+  
+
+  cbind(x=x[1:n.iterations],w) # return states and observables
+  
+}
+
+posterior.initial <- function(observed.value){
+  f <- phi[,observed.value] * vpi
+  f/sum(f)
+}
+
+posterior.next <- function(observed.value, prior){
+  f <- (prior %*% Pi) * phi[,observed.value]
+  f/sum(f)
+}
+```
+
+
+```{r}
+as.data.frame(phi) %>%
+  mutate(state=paste('s', seq(5), sep='')) %>% 
+  gather(observable, probability, V1:V7) %>%
+  arrange(state) %>%
+    ggplot(aes(y = state, x = observable, fill = probability)) +
+  geom_tile() + 
+  coord_fixed(ratio = 1) + 
+  scale_x_discrete(position = "top") +
+  theme(panel.background = element_blank())
+```
+
+
+## Toy example: $\theta$
+
+```{r}
+colnames(Pi) <- paste('s', seq(5), sep='')
+as.data.frame(Pi) %>%
+  mutate(state=paste('s', seq(5), sep='')) %>% 
+  gather(next.state, probability, s1:s5) %>%
+  arrange(state) %>%
+    ggplot(aes(x = state, y = next.state, fill = probability)) +
+  geom_tile() + 
+  coord_fixed(ratio = 1) + 
+  theme(panel.background = element_blank())
+```
+
+## State space inference
+
+- Given a sequence of observations $w_1, w_2 \ldots w_n$, what is the probability distribution over the possible values of $x_1, x_2 \ldots x_n$?
+- Assuming we know $\pi$, $\phi$, $\theta$, we can use recursive inference as follows:
+$$
+\begin{aligned}
+\Prob{x_i \given w_1\ldots w_2} 
+&= \frac{\Prob{w_i\given x_i}\Prob{x_i \given w_1, w_2 \ldots w_{i-1}}}{\sum_{\{x_i\}}\Prob{w_i\given x_i}\Prob{x_i \given w_1, w_2 \ldots w_{i-1}}},\\
+&\propto \Prob{w_i\given x_i}\sum_{\{x_{i-1}\}}\Prob{x_i \given x_{i-1}} \Prob{x_{i-1}\given w_1, w_2 \ldots w_{i-1}}
+\end{aligned}
+$$
+
+
+## State space inference in toy example
+```{r}
+
+simulation <- hmm.simulate(Pi, phi, vpi, n.iterations = 25)
+observed.values <- simulation[,'w']
+```
+
+- Given the observed values --- `r observed.values` --- the inferred values of the states are:
+
+```{r}
+state.inference <- list()
+alpha.i <- posterior.initial(observed.value = observed.values[1])
+state.inference[[1]] <- alpha.i
+for (i in seq(2, length(observed.values))){
+  alpha.i <- posterior.next(observed.value = observed.values[i],
+                            alpha.i)
+  state.inference[[i]] <- alpha.i
+}
+
+
+X <- as.data.frame(do.call(rbind, state.inference))
+names(X) <- paste('s', seq(5), sep='')
+X$time <- seq(nrow(X))
+
+gather(X, state, probability, s1:s5) %>%
+  ggplot(aes(x = time, y = state, fill = probability)) +
+  geom_tile() + 
+  coord_fixed(ratio = 3/2) + 
+  theme(panel.background = element_blank())
+```
+
+- The actual values of the state trajectory are: `r simulation[,'x']`.
+
+## Latent Dirichlet Allocation
+
+- Latent Dirichlet Allocation is a probabilistic bag-of-words language model.
+- It is a type of multilevel/hierarchical probabilistic mixture model.
+- It is defined as follows:
+For $1 \leq j \leq J$, 
+$$
+\pi_j \sim \ddirichlet{\alpha},\quad\text{for $1 \leq j \leq J$},
+$$
+and for $1 \leq i \leq n_{ji}$, 
+$$
+\begin{aligned}
+x_{ji} &\sim \dcat{\pi_j},\\
+w_{ji} &\sim \dcat{\phi_{[x_{ji}]}}
+\end{aligned}
+$$
+- The cardinality of $\phi$ is a modelling choice.
+- As such, we treat each document $j$ as a sample from a probabilistic mixture model, where the component probabilities are $\pi_j$, which are sampled from a Dirichlet distribution.
+
+
+## Latent Dirichlet Allocation Bayesian network {.fragile}
+
+- The Bayesian network diagram of the Latent Dirichlet Allocation model
+
+\begin{tikzpicture}
+\matrix[row sep=0.5cm,column sep=0.5cm] {
+	&&&&&&& \node (wji) [observation]{$w_{j\!i}$};&\\
+	&&&\node (phi) [parameter]{$\phi_{\!k}$};&  \node (klim) [limit,xshift=-5mm,yshift=-2mm]{$k\!\in\!\{1...K\}$};    &&& \\
+&&&	&&&& \node (xji) [state]{$x_{j\!i}$};& \node (xlim) [limit]{$i\!\in\!\{1...n_j\}$};\\
+&&&	\node (beta) [parameter]{$\beta$};&&&& \\
+&&&	&&&& \node (pij) [parameter]{$\pi_{j}$};&\node (jlim) [limit]{$j\!\in\!\{1...J\}$};\\ 
+&&&	&&&& \node (phantompji) {};&\\ 
+&&&	&&&& \node (alpha) [parameter]{$\alpha$};&\\
+};
+
+\path (phi) edge[->] (wji) ;
+\path (beta) edge[->] (phi) ;
+\path (xji) edge[->] (wji) ;
+\path (pij) edge[->] (xji) ;
+\path (alpha) edge[->] (pij) ;
+
+\begin{pgfonlayer}{background}
+\node [background,yshift=1mm,inner sep=3mm,fit=(wji) (xji) (xlim) ] {};
+\node [background,yshift=0mm,inner sep=5mm,fit=(wji) (xji) (xlim) (pij)] {};
+\node [background,rounded corners=1mm,yshift=0mm,inner sep=2mm,fit=(phi) (klim)] {};
+\end{pgfonlayer}
+
+\end{tikzpicture}
+
+
+## Topic modelling the AP corpus
+
+```{r, eval=FALSE, echo=TRUE}
+data("AssociatedPress")
+
+ap_lda <- LDA(AssociatedPress, 
+              k = 50, 
+              control = list(seed = 1234))
+
+tidy(ap_lda, matrix = "beta") %>%
+  group_by(topic) %>%
+  top_n(10, beta) %>%
+  ungroup() %>%
+  arrange(topic, -beta) %>% 
+```
+
+```{r}
+load('data/ap_lda_50.Rda')
+```
+
+## Example topics from AP corpus
+
+```{r}
+topics <- tidy(ap_lda, matrix = "beta") %>%
+  group_by(topic) %>%
+  top_n(10, beta) %>%
+  mutate(rank = dense_rank(desc(beta))) %>%
+  ungroup() %>%
+  arrange(topic, -beta) %>% 
+  dplyr::select(rank, topic, term) %>%
+  mutate(topic = paste("topic_", str_pad(topic, 2, pad='0'), sep='')) %>%
+  spread(topic, term) %>%
+  dplyr::select(topic_01, topic_05, topic_10, topic_15, topic_20)
+
+
+pander(topics)
+```
+## Topic 1
+```{r}
+topic.cloud <- function(the.topic, K=50){
+  
+  Df <- tidy(ap_lda, matrix = "beta") %>%
+    group_by(topic) %>%
+    ungroup() %>%
+    filter(topic==the.topic)
+  
+  wordcloud(words = Df$term, 
+            freq = Df$beta, 
+            max.words = K, rot.per=0.0,fixed.asp = FALSE, random.order = F)
+  
+}
+
+topic.cloud(1, K=250)
+```
+
+## Topic 5
+```{r}
+topic.cloud(5, K=250)
+```
+
+## Topic 10
+```{r}
+topic.cloud(10, K=250)
+```
+
+
+## Topic 15
+```{r}
+topic.cloud(15, K=250)
+```
+
+
+## Topic 20
+```{r}
+topic.cloud(20, K=250)
+```
+
+
+
