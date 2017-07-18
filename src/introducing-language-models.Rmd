@@ -689,6 +689,24 @@ as.data.frame(Pi) %>%
   theme(panel.background = element_blank())
 ```
 
+## Posterior inference
+
+- We usually will use Dirichlet priors on $\pi$, $\phi_1, \phi_2 \ldots \phi_K$, and $\theta_1, \theta_2 \ldots \theta_K$.
+- However, the posterior distribution
+$$
+\Prob{\pi, \phi, \theta \given \mathcal{D}}
+$$
+is not analytically tractable. 
+- In this situation, we use Monte Carlo methods to draw samples from this posterior distribution. 
+- For this, we may use a *blocked Gibbs sampler* such where we iteratively draw a sample from the posterior distribution of the latent state space, assuming values for the parameters, and then from the posterior over the parameters, assuming values for the state space:
+$$
+\begin{aligned}
+\tilde{x} &\sim \Prob{x \given w, \tilde{\pi}, \tilde{\phi}, \tilde{\theta}},\\
+\tilde{\pi}, \tilde{\phi}, \tilde{\theta} &\sim \Prob{\pi, \phi, \theta \given w, \tilde{x}}
+\end{aligned}
+$$
+
+
 ## State space inference
 
 - Given a sequence of observations $w_1, w_2 \ldots w_n$, what is the probability distribution over the possible values of $x_1, x_2 \ldots x_n$?
