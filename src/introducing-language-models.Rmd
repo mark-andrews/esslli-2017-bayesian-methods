@@ -37,7 +37,7 @@ sample.dirichlet <- function(alpha) as.vector(MCMCpack::rdirichlet(1, alpha))
 ## Language data
 
 - A *minimal* description of observed language data is as follows: $$
-  \mathcal{D} = w_1, w_2 \ldots w_j \ldots w_J,
+  \mathcal{D} = \{w_1, w_2 \ldots w_j \ldots w_J\},
 $$
 with 
 $$
@@ -310,10 +310,11 @@ We can set the value of $a$ to the value that maximizes the likelihood function.
 - For $1 \leq j \leq J$,
 $$
 \begin{aligned}
-x_{j1} &\sim \dcat{\pi},\\
-x_{ji} &\sim \dcat{\theta_{x_{ji-1}}},\quad\text{for $2 \leq i \leq n_j$}.
+w_{j1} &\sim \dcat{\pi},\\
+w_{ji} &\sim \dcat{\theta_{[w_{ji-1}}]},\quad\text{for $2 \leq i \leq n_j$}.
 \end{aligned}
 $$
+where $\theta$ is a $V \times V$ matrix, and $\theta_{vu} \triangleq \Prob{w_{ji} = u\given w_{ji-1}=v}$
 - In other words, for each sentence or text, we first sample the initial word for a categorical distribution. For the remaining words, we sample their values from a categorical distribution that is conditioned on the previous word. 
 
 ## Bayesian Bigram model
@@ -324,8 +325,8 @@ $$
 \begin{aligned}
 \pi &\sim \ddirichlet{\alpha_0},\\
 \theta_v &\sim \ddirichlet{\alpha_v},\quad\text{for $1 \leq v \leq V$},\\
-x_{j1} &\sim \dcat{\pi},\\
-x_{ji} &\sim \dcat{\theta_{x_{ji-1}}},\quad\text{for $2 \leq i \leq n_j$}.
+w_{j1} &\sim \dcat{\pi},\\
+w_{ji} &\sim \dcat{\theta_{w_{ji-1}}},\quad\text{for $2 \leq i \leq n_j$}.
 \end{aligned}
 $$
 - Note that here we have a separate $\alpha_v$ prior for each conditional distribution $\theta_v$. Other options are possible.
