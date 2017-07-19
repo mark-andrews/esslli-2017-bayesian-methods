@@ -56,7 +56,7 @@ $$
 
 ## Unigram probabilistic language model
 
-- A *probailistic language model* is any probailistic generative model of the language data $\mathcal{D}$.
+- A *probabilistic language model* is any probabilistic generative model of the language data $\mathcal{D}$.
 - One of the simplest possible probabilistic language models is
 $$
 w_{ji} \sim \mathrm{dcat}(\pi),\quad \text{for $i \in 1,2\ldots n_j$, $j \in 1,2\ldots J$}
