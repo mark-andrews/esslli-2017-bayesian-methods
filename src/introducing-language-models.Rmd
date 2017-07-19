@@ -311,7 +311,7 @@ We can set the value of $a$ to the value that maximizes the likelihood function.
 $$
 \begin{aligned}
 w_{j1} &\sim \dcat{\pi},\\
-w_{ji} &\sim \dcat{\theta_{[w_{ji-1}}]},\quad\text{for $2 \leq i \leq n_j$}.
+w_{ji} &\sim \dcat{\theta_{[w_{ji-1}]}},\quad\text{for $2 \leq i \leq n_j$}.
 \end{aligned}
 $$
 where $\theta$ is a $V \times V$ matrix, and $\theta_{vu} \triangleq \Prob{w_{ji} = u\given w_{ji-1}=v}$
